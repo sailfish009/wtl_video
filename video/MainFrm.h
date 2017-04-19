@@ -16,6 +16,24 @@
 #include "videoView.h"
 ////////////////////////////////////////////////////////////////////////////////////////
 
+#include <comdef.h>
+#include <memory>
+
+// D2D
+#if 1
+#include <d2d.h>
+#pragma comment(lib, "d2d.lib")
+#else
+#include <d2d1.h>
+#include <d2d1helper.h>
+#include <wincodec.h>
+#pragma comment(lib, "d2d1.lib")
+#pragma comment(lib, "Windowscodecs.lib")
+#endif
+
+#include "util.h"
+
+
 class CMainFrame : 
 	public CFrameWindowImpl<CMainFrame>, 
 	public CUpdateUI<CMainFrame>,
@@ -23,6 +41,18 @@ class CMainFrame :
 {
 public:
 	DECLARE_FRAME_WND_CLASS(NULL, IDR_MAINFRAME)
+
+  CMainFrame() :
+    b_start(FALSE),
+    pixel_w(1920), pixel_h(1080),
+    yuvPlane(nullptr),
+    m_render(nullptr)
+    {
+    }
+
+  ~CMainFrame()
+  {
+  }
 
 	CVideoView m_view;
 	CCommandBarCtrl m_CmdBar;
@@ -50,13 +80,37 @@ public:
 		MESSAGE_HANDLER(WM_CREATE, OnCreate)
 		MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
 		COMMAND_ID_HANDLER(ID_APP_EXIT, OnFileExit)
-		COMMAND_ID_HANDLER(ID_FILE_NEW, OnFileNew)
+		//COMMAND_ID_HANDLER(ID_FILE_NEW, OnFileNew)
+		COMMAND_ID_HANDLER(ID_FILE_OPEN, OnFileNew)
 		COMMAND_ID_HANDLER(ID_VIEW_TOOLBAR, OnViewToolBar)
 		COMMAND_ID_HANDLER(ID_VIEW_STATUS_BAR, OnViewStatusBar)
 		COMMAND_ID_HANDLER(ID_APP_ABOUT, OnAppAbout)
 		CHAIN_MSG_MAP(CUpdateUI<CMainFrame>)
 		CHAIN_MSG_MAP(CFrameWindowImpl<CMainFrame>)
 	END_MSG_MAP()
+
+
+public:
+  //  user implementation
+  FILE * fp;
+  std::unique_ptr<UINT8[]> yuvPlane;
+  size_t yuvPlaneSz;
+  //std::unique_ptr<UINT8[]> yPlane;
+  //std::unique_ptr<UINT8[]> uPlane;
+  //std::unique_ptr<UINT8[]> vPlane;
+  //size_t yPlaneSz, uvPlaneSz;
+  int pixel_w, pixel_h, uvPitch;
+  RECT m_frame_rect;
+
+  BOOL b_start;
+
+  d2d *m_render;
+
+  // user function
+  void init();
+  void display(const wchar_t* path);
+  void display_proc(BOOL *b_start);
+  void render();
 
 // Handler prototypes (uncomment arguments if needed):
 //	LRESULT MessageHandler(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
@@ -88,6 +142,7 @@ public:
 
     MoveWindow(0, 0, 1580, 1024);
     CenterWindow();
+    init();
 
 		UIAddToolBar(hWndToolBar);
 		UISetCheck(ID_VIEW_TOOLBAR, 1);
@@ -123,6 +178,11 @@ public:
 	LRESULT OnFileNew(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
 		// TODO: add code to initialize document
+    wchar_t file_path_str[128] = { 0 };
+    if (get_file_path(file_path_str))
+    {
+      display(file_path_str);
+    }
 
 		return 0;
 	}
